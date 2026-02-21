@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RealTimeStream - Live Dashboard</title>
+    <link rel="icon" type="image/png" href="https://i.ibb.co.com/qMT6ByG6/Th-PNG.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+        }
+        .video-container {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 Aspect Ratio */
+            height: 0;
+            overflow: hidden;
+            background: black;
+            border-radius: 0.75rem;
+        }
+        .video-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: auto;
+        }
+        /* Blocker agar tidak bisa klik elemen internal youtube dengan mudah */
+        .video-blocker {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            cursor: default;
+            background: rgba(0,0,0,0);
+        }
+        
+        .chat-container {
+            height: calc(100vh - 160px);
+            min-height: 500px;
+        }
+
+        .control-btn {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+        }
+        .control-btn:hover {
+            background: #ef4444;
+        }
+
+        /* Fullscreen styles */
+        #playerWrapper:fullscreen {
+            padding-bottom: 0;
+            height: 100vh;
+            width: 100vw;
+            border-radius: 0;
+        }
+        #playerWrapper:fullscreen .video-blocker { display: none; }
+
+        .resolution-menu {
+            position: absolute;
+            bottom: 60px;
+            right: 0;
+            background: rgba(31, 41, 55, 0.95);
+            border: 1px solid rgba(75, 85, 99, 0.5);
+            border-radius: 8px;
+            display: none;
+            width: 120px;
+            z-index: 50;
+        }
+        .resolution-menu.active { display: block; }
+        
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #374151;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="text-white font-sans">
+
+    <!-- Header -->
+    <header class="bg-gray-900 border-b border-gray-800 p-4 sticky top-0 z-50">
+        <div class="max-w-[1600px] mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <!-- Logo dihapus sesuai permintaan -->
+                <h1 class="text-xl font-black italic tracking-tighter text-white uppercase">
+                    RealTime<span class="text-red-500">Stream</span>
+                </h1>
+                <span class="hidden md:block bg-red-600 text-[10px] font-bold px-2 py-0.5 rounded animate-pulse">LIVE</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <div id="clock" class="text-sm font-mono text-gray-400">00:00:00</div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-[1600px] mx-auto p-4 lg:p-6">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            
+            <!-- Area Video (Kolom 1-3) -->
+            <div class="lg:col-span-3 space-y-4">
+                <div id="playerWrapper" class="video-container shadow-2xl border border-gray-800">
+                    <!-- Layer Blocker & Overlay -->
+                    <div class="video-blocker"></div>
+                    
+                    <!-- Tombol Kontrol Kustom -->
+                    <div class="absolute bottom-4 right-4 z-30 flex gap-2">
+                        <!-- Play/Pause -->
+                        <button onclick="togglePlay()" class="control-btn" title="Play/Pause">
+                            <svg id="playIcon" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        </button>
+                        
+                        <!-- Sound -->
+                        <button onclick="toggleMute()" class="control-btn" title="Mute/Unmute">
+                            <svg id="muteIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path>
+                            </svg>
+                        </button>
+
+                        <!-- Resolusi -->
+                        <div class="relative">
+                            <button onclick="document.getElementById('resMenu').classList.toggle('active')" class="control-btn gap-2">
+                                <span id="resLabel" class="text-[10px] font-bold">1080p</span>
+                            </button>
+                            <div id="resMenu" class="resolution-menu">
+                                <div class="p-2 text-xs font-bold border-b border-gray-700">Resolusi</div>
+                                <div class="px-3 py-2 text-xs hover:bg-red-500 cursor-pointer" onclick="changeRes('1080p')">1080p HD</div>
+                                <div class="px-3 py-2 text-xs hover:bg-red-500 cursor-pointer" onclick="changeRes('720p')">720p</div>
+                                <div class="px-3 py-2 text-xs hover:bg-red-500 cursor-pointer" onclick="changeRes('480p')">480p</div>
+                            </div>
+                        </div>
+
+                        <!-- Fullscreen -->
+                        <button onclick="toggleFullscreen()" class="control-btn">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Player Iframe -->
+                    <iframe id="mainPlayer" src="" frameborder="0" allow="autoplay; encrypted-media; fullscreen"></iframe>
+                </div>
+
+                <!-- Judul & Info -->
+                <div class="bg-gray-900 border border-gray-800 p-5 rounded-xl">
+                    <h2 class="text-xl font-bold mb-1">Streaming Langsung - RealTimeStream</h2>
+                    <div class="flex items-center gap-4 text-sm text-gray-400">
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 bg-green-500 rounded-full"></span> Online</span>
+                        <span>•</span>
+                        <span>Multi-Resolution Player</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Area Live Chat (Kolom 4) -->
+            <div class="lg:col-span-1">
+                <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden chat-container flex flex-col shadow-xl">
+                    <div class="bg-gray-800 p-3 border-b border-gray-700 flex justify-between items-center">
+                        <span class="font-bold text-sm flex items-center gap-2">
+                            <svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z"></path></svg>
+                            LIVE CHAT
+                        </span>
+                        <div class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                    </div>
+                    <div class="flex-grow bg-black">
+                        <!-- Chat Iframe -->
+                        <iframe id="chatPlayer" src="" width="100%" height="100%" frameborder="0"></iframe>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        /**
+         * CONFIGURATION
+         * Ganti ID di bawah ini sesuai kebutuhan
+         */
+        const CONFIG = {
+            VIDEO_ID: "PQJqcnhNqJk", // ID Video Utama
+            CHAT_ID: "PQJqcnhNqJk",  // ID Chat (bisa berbeda dengan Video)
+            DOMAIN: window.location.hostname || "localhost"
+        };
+
+        let isMuted = false;
+        let isPlaying = true;
+
+        // Inisialisasi Player & Chat
+        function initApp() {
+            const player = document.getElementById('mainPlayer');
+            const chat = document.getElementById('chatPlayer');
+
+            // Build URL Player
+            const playerUrl = `https://www.youtube.com/embed/${CONFIG.VIDEO_ID}?autoplay=1&mute=0&controls=0&rel=0&modestbranding=1&showinfo=0&iv_load_policy=3`;
+            player.src = playerUrl;
+
+            // Build URL Chat (Youtube Live Chat Embed)
+            const chatUrl = `https://www.youtube.com/live_chat?v=${CONFIG.CHAT_ID}&embed_domain=${CONFIG.DOMAIN}`;
+            chat.src = chatUrl;
+        }
+
+        function togglePlay() {
+            const player = document.getElementById('mainPlayer');
+            const icon = document.getElementById('playIcon');
+            if(isPlaying) {
+                player.src = "about:blank";
+                icon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+            } else {
+                player.src = `https://www.youtube.com/embed/${CONFIG.VIDEO_ID}?autoplay=1&mute=${isMuted ? 1 : 0}&controls=0&rel=0`;
+                icon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+            }
+            isPlaying = !isPlaying;
+        }
+
+        function toggleMute() {
+            isMuted = !isMuted;
+            const player = document.getElementById('mainPlayer');
+            const icon = document.getElementById('muteIcon');
+            
+            // Re-load player with mute state (karena YT iframe API butuh script berat, kita pakai cara reload URL yang ringan)
+            player.src = `https://www.youtube.com/embed/${CONFIG.VIDEO_ID}?autoplay=1&mute=${isMuted ? 1 : 0}&controls=0&rel=0`;
+            
+            if(isMuted) {
+                icon.innerHTML = '<path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636"></path><path d="M15 8.464a5 5 0 010 7.072M9 15H7a1 1 0 01-1-1v-4a1 1 0 011-1h2l4-4v12l-4-4z"></path>';
+            } else {
+                icon.innerHTML = '<path d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path>';
+            }
+        }
+
+        function changeRes(val) {
+            document.getElementById('resLabel').innerText = val;
+            document.getElementById('resMenu').classList.remove('active');
+            // Mocking refresh player for resolution change effect
+            const player = document.getElementById('mainPlayer');
+            player.src = player.src; 
+        }
+
+        function toggleFullscreen() {
+            const el = document.getElementById('playerWrapper');
+            if (!document.fullscreenElement) {
+                el.requestFullscreen().catch(err => console.log(err));
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // Clock Function
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString('id-ID');
+        }
+
+        setInterval(updateClock, 1000);
+        window.onload = initApp;
+
+        // Prevent Right Click on Video
+        document.getElementById('playerWrapper').addEventListener('contextmenu', e => e.preventDefault());
+    </script>
+</body>
+</html>
